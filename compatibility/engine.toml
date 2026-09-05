@@ -1,0 +1,7 @@
+schema = 1
+package = "specmesh-engine"
+version = "0.0.0"
+revision = "3928d376d6d24036f34c1f6d00a7f15e32cfc717"
+
+# This is development verification evidence, not a release dependency or a
+# declaration that arbitrary Engine and Server versions are compatible.

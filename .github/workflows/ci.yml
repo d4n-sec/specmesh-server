@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Server
+        uses: actions/checkout@v4
+        with:
+          path: specmesh-server
+          persist-credentials: false
+
+      - name: Read compatible Engine revision
+        id: engine
+        working-directory: specmesh-server
+        run: echo "revision=$(python3 ci/engine_compat.py revision)" >> "$GITHUB_OUTPUT"
+
+      - name: Require Engine repository variable
+        env:
+          ENGINE_REPOSITORY: ${{ vars.SPECMESH_ENGINE_REPOSITORY }}
+        run: test -n "$ENGINE_REPOSITORY"
+
+      - name: Check out compatible Engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.SPECMESH_ENGINE_REPOSITORY }}
+          ref: ${{ steps.engine.outputs.revision }}
+          path: specmesh-engine
+          persist-credentials: false
+
+      - name: Install exact Rust toolchain
+        working-directory: specmesh-server
+        run: rustup toolchain install "$(cat ci/rust-version)" --profile minimal --component clippy,rustfmt
+
+      - name: Verify Server and cross-repository contract
+        working-directory: specmesh-server
+        run: rustup run "$(cat ci/rust-version)" bash ci/verify.sh
