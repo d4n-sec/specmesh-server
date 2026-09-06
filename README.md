@@ -50,16 +50,19 @@ file output, including confirmation, failure, cancellation, nested Impact, and
 RuleReview data, without using a direct service call as a transport substitute.
 
 During sibling-repository development, `Cargo.toml` uses an exact `=0.0.0`
-Engine version plus `../specmesh-engine`. The development verification pair is
+Engine version plus `../specmesh-engine`. The exact Engine commit and tree are
 recorded in [`compatibility/engine.toml`](compatibility/engine.toml), and
-`ci/verify.sh` rejects a sibling Engine whose package version or Git revision
+`ci/verify.sh` rejects a sibling Engine whose package version, Git revision or tree
 does not match that file. `Cargo.lock` fixes the resolved dependency graph, but
 does not hash or pin the contents of a path dependency.
 
-This compatibility record is verification evidence only. It is not a release
-or a claim that arbitrary matching program versions are compatible. A future
-Server release must use an exact published Engine package version or an
-immutable revision and record that choice in its release materials.
+For local binary delivery, the build exports the recorded Engine commit and the
+current Server commit into independent sibling directories. It verifies Cargo's
+actual Engine path, compiles those snapshots, and checks that their files remain
+unchanged. Both original repositories must be clean; `SPECMESH_ALLOW_DIRTY` cannot
+bypass local delivery checks. No remote repository or package upload is required.
+Online publication remains a separate release task requiring an exact package
+version or immutable revision.
 
 To create a local deterministic binary bundle without publishing it:
 
@@ -68,5 +71,14 @@ bash ci/release-bundle.sh target/release-bundles
 ```
 
 The bundle contains the Server binary, README, Apache-2.0 license, lockfile,
-Engine compatibility record, and build metadata. `ci/verify.sh` creates it
+Engine compatibility record, build metadata, and `metadata/source-lock.json`
+with commit/tree, Git export hashes and lockfile hashes. `ci/verify.sh` creates it
 twice and requires identical SHA-256 values.
+
+This binary bundle does not include all third-party sources and is not an offline
+source distribution. Building it requires the dependencies to be available in the
+local Cargo cache; `cargo fetch --locked` can prepare them when needed.
+
+Release builds and verification require Python 3.11+ in addition to the pinned Rust
+toolchain. The portable bundle format, macOS LLVM loader handling, interpreter
+selection, and retained verification artifacts are documented in [ci/README.md](ci/README.md).

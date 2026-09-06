@@ -1,7 +1,8 @@
 schema = 1
 package = "specmesh-engine"
 version = "0.0.0"
-revision = "3928d376d6d24036f34c1f6d00a7f15e32cfc717"
+revision = "bbc8172897dabfb1bc97cea6ee298dde8820495d"
+tree = "761b5eedb7877ff5d572cddfd8415251fa295c4f"
 
-# This is development verification evidence, not a release dependency or a
-# declaration that arbitrary Engine and Server versions are compatible.
+# Local delivery compiles a verified Git export of this exact commit/tree.
+# Cargo.lock pins the third-party graph; it does not store path dependency revisions.

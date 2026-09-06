@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read and verify the pinned sibling Engine development snapshot."""
+"""Read and verify the Engine source required for development and local delivery."""
 
 from __future__ import annotations
 
@@ -41,6 +41,8 @@ def load_compatibility(server_root: Path) -> dict:
         fail("compatibility package must be specmesh-engine")
     if not REVISION_PATTERN.fullmatch(str(compatibility.get("revision", ""))):
         fail("compatibility revision must be a full lowercase Git SHA")
+    if not REVISION_PATTERN.fullmatch(str(compatibility.get("tree", ""))):
+        fail("compatibility tree must be a full lowercase Git SHA")
     return compatibility
 
 
@@ -71,6 +73,8 @@ def verify(server_root: Path, compatibility: dict) -> None:
         fail(
             f"Engine HEAD is {actual_revision}; expected {compatibility['revision']}"
         )
+    if git(engine_dir, "rev-parse", "HEAD^{tree}") != compatibility["tree"]:
+        fail("Engine tree does not match compatibility record")
     if git(engine_dir, "status", "--porcelain", "--untracked-files=normal"):
         if os.environ.get("SPECMESH_ALLOW_DIRTY") != "1":
             fail("Engine working tree is dirty")
@@ -87,6 +91,8 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "verify"
     if command == "revision":
         print(compatibility["revision"])
+    elif command == "tree":
+        print(compatibility["tree"])
     elif command == "verify":
         verify(server_root, compatibility)
     else:

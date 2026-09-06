@@ -18,6 +18,11 @@ jobs:
           path: specmesh-server
           persist-credentials: false
 
+      - name: Select Python for release tooling
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Read compatible Engine revision
         id: engine
         working-directory: specmesh-server
