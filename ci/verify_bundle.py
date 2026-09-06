@@ -12,7 +12,7 @@ import tempfile
 import tomllib
 
 from bundle import source_sha256
-from local_snapshot import git
+from local_snapshot import BUILD_WORKSPACE, git
 
 
 def verify(archive: Path, repo: Path) -> None:
@@ -72,6 +72,7 @@ def verify(archive: Path, repo: Path) -> None:
             assert source_lock["cargo_lock_sha256"] == metadata["cargo_lock_sha256"]
             assert source_lock["engine_cargo_lock_sha256"] == metadata["engine_cargo_lock_sha256"]
             assert source_lock["cargo_engine_manifest"] == "specmesh-engine/Cargo.toml"
+            assert source_lock["cargo_workspace_manifest_sha256"] == hashlib.sha256(BUILD_WORKSPACE.encode()).hexdigest()
             assert metadata["working_tree"] == metadata["engine_working_tree"] == "clean"
             assert metadata["engine_source_sha256"] == source_sha256(engine)
             assert metadata["engine_cargo_lock_sha256"] == hashlib.sha256((engine / "Cargo.lock").read_bytes()).hexdigest()

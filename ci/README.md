@@ -70,6 +70,16 @@ regression checks inspect member contents, paths, permissions, links and gzip/ta
 metadata; full verification also extracts both actual bundles and runs their binaries.
 Reproducibility means two builds of the same source with the same host/toolchain;
 it is not a promise that binaries for different targets or toolchains have equal hashes.
+Local delivery uses Rust's `--remap-path-prefix` to represent the random snapshot
+directory as `specmesh-source` in compiled diagnostics. It changes embedded source
+paths, not the selected sources. Flags are passed through `CARGO_ENCODED_RUSTFLAGS`
+so paths with spaces remain one argument; an existing encoded value takes precedence
+over `RUSTFLAGS`, following Cargo's rules, and its arguments are retained.
+A temporary Cargo workspace above the two exports makes Cargo identify the sibling
+Engine relative to a common build root. It contains only the Server member, excludes
+Engine from workspace membership, and copies the Server lockfile unchanged. Its
+manifest hash is recorded in source-lock; both it and the copied lockfile are verified.
+The exported Engine and Server manifests and source files are never rewritten.
 
 Build metadata contains the Git commit and tree, source SHA-256, clean state, Python
 version, binary and lockfile hashes, and the source-lock hash. Bundle verification

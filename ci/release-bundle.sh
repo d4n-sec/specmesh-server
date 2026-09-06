@@ -62,9 +62,12 @@ source_tmp=$(mktemp -d "${TMPDIR:-/tmp}/specmesh-server-release-source.XXXXXX")
     --revision "$engine_revision" --tree "$engine_tree" \
     --output "$source_tmp/snapshot" >&2
 source_root="$source_tmp/snapshot/specmesh-server"
+encoded_rustflags=$("$SPECMESH_PYTHON" "$script_dir/local_snapshot.py" rustflags \
+    --output "$source_tmp/snapshot")
 cd "$source_root"
 
-SOURCE_DATE_EPOCH="$source_epoch" CARGO_TARGET_DIR="$build_target_dir" cargo build \
+SOURCE_DATE_EPOCH="$source_epoch" CARGO_TARGET_DIR="$build_target_dir" \
+    CARGO_ENCODED_RUSTFLAGS="$encoded_rustflags" cargo build \
     --release \
     --locked \
     --offline \
@@ -99,6 +102,7 @@ binary_sha=$("$SPECMESH_PYTHON" "$script_dir/bundle.py" sha256 "$stage/bin/specm
     printf 'archive_format=ustar+gzip-v1\n'
     printf 'working_tree=clean\n'
     printf 'dependency_source=local-git-snapshot\n'
+    printf 'rust_path_remap=specmesh-source\n'
     printf 'source_lock_sha256=%s\n' "$source_lock_sha"
     printf 'engine_version=%s\n' "$engine_version"
     printf 'engine_revision=%s\n' "$engine_revision"

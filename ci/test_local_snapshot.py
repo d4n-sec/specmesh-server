@@ -47,6 +47,12 @@ class LocalSnapshotTests(unittest.TestCase):
         subprocess.run([sys.executable, str(Path(local_snapshot.__file__)), "verify",
                         "--output", str(output), "--server", str(self.server),
                         "--engine", str(self.engine)], check=True)
+        lock = output / "Cargo.lock"
+        original_lock = lock.read_bytes()
+        lock.write_bytes(original_lock + b"\n")
+        with self.assertRaisesRegex(ValueError, "locked dependency graph changed"):
+            local_snapshot.verify_prepared(output)
+        lock.write_bytes(original_lock)
         source = output / "specmesh-engine/src/lib.rs"
         source.write_bytes(source.read_bytes() + b"\n// changed fixture\n")
         with self.assertRaisesRegex(ValueError, "snapshot changed"):
@@ -82,6 +88,20 @@ class LocalSnapshotTests(unittest.TestCase):
         for key in ("revision", "tree"):
             with self.subTest(key=key), self.assertRaises(SystemExit):
                 engine_compat.verify(self.server_source, {**compatibility, key: "0" * 40})
+
+    def test_remap_preserves_cargo_flag_precedence_and_spaces(self):
+        snapshot = self.root / "snapshot with spaces"
+        suffix = ["--remap-path-prefix", f"{snapshot.resolve()}=specmesh-source"]
+        for environment, expected in (
+            ({}, []),
+            ({"RUSTFLAGS": "-C opt-level=2"}, ["-C", "opt-level=2"]),
+            ({"RUSTFLAGS": "ignored", "CARGO_ENCODED_RUSTFLAGS": ""}, []),
+            ({"RUSTFLAGS": "ignored", "CARGO_ENCODED_RUSTFLAGS": "-C\x1flink-arg=with spaces"},
+             ["-C", "link-arg=with spaces"]),
+        ):
+            with self.subTest(environment=environment):
+                self.assertEqual(local_snapshot.remapped_rustflags(snapshot, environment).split("\x1f"),
+                                 expected + suffix)
 
 
 if __name__ == "__main__":

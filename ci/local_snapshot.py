@@ -5,10 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
 import tomllib
+
+BUILD_WORKSPACE = ('[workspace]\nmembers = ["specmesh-server"]\n'
+                   'exclude = ["specmesh-engine"]\nresolver = "3"\n')
 
 
 def git(root: Path, *args: str) -> str:
@@ -48,7 +52,7 @@ def export(root: Path, revision: str, destination: Path) -> str:
     return hashlib.sha256(archive.read_bytes()).hexdigest()
 
 
-def verify_cargo_path(server: Path, engine: Path) -> None:
+def verify_cargo_path(server: Path, engine: Path, workspace: Path | None = None) -> None:
     host = next(line.split(": ", 1)[1] for line in subprocess.check_output(
         ["rustc", "-vV"], text=True, cwd=server).splitlines() if line.startswith("host: "))
     metadata = json.loads(subprocess.check_output(
@@ -56,6 +60,8 @@ def verify_cargo_path(server: Path, engine: Path) -> None:
          "--filter-platform", host, "--manifest-path", str(server / "Cargo.toml")],
         text=True, cwd=server,
     ))
+    if workspace is not None and Path(metadata["workspace_root"]).resolve() != workspace.resolve():
+        raise ValueError("Cargo did not use the common local build root")
     packages = {item["id"]: item for item in metadata["packages"]}
     server_id = next(key for key, item in packages.items()
                      if Path(item["manifest_path"]).resolve() == (server / "Cargo.toml").resolve())
@@ -80,7 +86,11 @@ def prepare(server_root: Path, engine_root: Path, revision: str, tree: str, outp
     server = output / "specmesh-server"
     engine_archive = export(engine_root, revision, engine)
     server_archive = export(server_root, server_revision, server)
-    verify_cargo_path(server, engine)
+    # A common build root makes the sibling dependency's Cargo identity relative.
+    # Both exported source trees remain byte-for-byte unchanged.
+    (output / "Cargo.toml").write_text(BUILD_WORKSPACE)
+    (output / "Cargo.lock").write_bytes((server / "Cargo.lock").read_bytes())
+    verify_cargo_path(server, engine, output)
     # Reject source changes during preparation, even though exports are immutable.
     require_source(server_root, server_revision, server_tree)
     require_source(engine_root, revision, tree)
@@ -93,6 +103,7 @@ def prepare(server_root: Path, engine_root: Path, revision: str, tree: str, outp
         "server_tree": server_tree,
         "server_archive_sha256": server_archive,
         "cargo_engine_manifest": "specmesh-engine/Cargo.toml",
+        "cargo_workspace_manifest_sha256": hashlib.sha256(BUILD_WORKSPACE.encode()).hexdigest(),
         "cargo_lock_sha256": hashlib.sha256((server / "Cargo.lock").read_bytes()).hexdigest(),
         "engine_cargo_lock_sha256": hashlib.sha256((engine / "Cargo.lock").read_bytes()).hexdigest(),
     }
@@ -105,6 +116,10 @@ def verify_prepared(output: Path, server_root: Path | None = None,
     """Reject altered exports or Cargo resolution before/after the actual build."""
     output = output.resolve()
     record = json.loads((output / "source-lock.json").read_text())
+    if ((output / "Cargo.toml").read_text() != BUILD_WORKSPACE
+            or hashlib.sha256(BUILD_WORKSPACE.encode()).hexdigest() != record["cargo_workspace_manifest_sha256"]
+            or (output / "Cargo.lock").read_bytes() != (output / "specmesh-server/Cargo.lock").read_bytes()):
+        raise ValueError("local build root or locked dependency graph changed")
     for name, origin in (("server", server_root), ("engine", engine_root)):
         if origin is not None:
             require_source(origin, record[name + "_revision"], record[name + "_tree"])
@@ -130,7 +145,17 @@ def verify_prepared(output: Path, server_root: Path | None = None,
                     raise ValueError(f"source snapshot changed: {name}/{item.name}")
             if {path.relative_to(directory).as_posix() for path in directory.rglob("*")} != expected:
                 raise ValueError("source snapshot contains added or missing files")
-    verify_cargo_path(output / "specmesh-server", output / "specmesh-engine")
+    verify_cargo_path(output / "specmesh-server", output / "specmesh-engine", output)
+
+
+def remapped_rustflags(snapshot: Path, environment: dict) -> str:
+    """Preserve Cargo's environment precedence and keep paths as single arguments."""
+    if "CARGO_ENCODED_RUSTFLAGS" in environment:
+        encoded = environment["CARGO_ENCODED_RUSTFLAGS"]
+    else:
+        encoded = "\x1f".join(environment.get("RUSTFLAGS", "").split())
+    remap = "\x1f".join(["--remap-path-prefix", f"{snapshot.resolve()}=specmesh-source"])
+    return encoded + ("\x1f" if encoded else "") + remap
 
 
 if __name__ == "__main__":
@@ -146,8 +171,12 @@ if __name__ == "__main__":
     verification.add_argument("--output", type=Path, required=True)
     verification.add_argument("--server", type=Path, required=True)
     verification.add_argument("--engine", type=Path, required=True)
+    rustflags = commands.add_parser("rustflags")
+    rustflags.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "prepare":
         print(json.dumps(prepare(args.server, args.engine, args.revision, args.tree, args.output), indent=2))
-    else:
+    elif args.command == "verify":
         verify_prepared(args.output, args.server, args.engine)
+    else:
+        print(remapped_rustflags(args.output, os.environ))
