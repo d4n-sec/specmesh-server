@@ -45,6 +45,10 @@ jobs:
         working-directory: specmesh-server
         run: rustup toolchain install "$(cat ci/rust-version)" --profile minimal --component clippy,rustfmt
 
+      - name: Fetch locked Rust dependencies
+        working-directory: specmesh-server
+        run: rustup run "$(cat ci/rust-version)" cargo fetch --locked
+
       - name: Verify Server and cross-repository contract
         working-directory: specmesh-server
         run: rustup run "$(cat ci/rust-version)" bash ci/verify.sh
